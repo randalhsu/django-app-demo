@@ -1,4 +1,6 @@
 import logging
+import random
+import string
 import re
 from urllib.parse import urlsplit
 from django.core.validators import ValidationError
@@ -48,6 +50,22 @@ def is_valid_short_url(url):
     return True
 
 
+def generate_random_short_url():
+    CHAR_SET = string.ascii_letters + string.digits
+    SHORT_URL_LENGTH = 6
+    RETRY_LIMIT = 5
+
+    while retry := RETRY_LIMIT > 0:
+        short_url = ''.join(random.choice(CHAR_SET)
+                            for _ in range(SHORT_URL_LENGTH))
+        if not UrlRecord.objects.filter(short_url=short_url).exists():
+            return short_url
+        retry -= 1
+
+    logger.error(f'Unable to generate any available random short_url!')
+    return ''
+
+
 class UrlRecordListCreateView(generics.ListCreateAPIView):
     MAX_RECORDS = 10
 
@@ -71,14 +89,20 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
         logger.info(f'[{get_client_ip(request)}] API Create: {request.data}')
         long_url = request.data.get('long_url', '')
         long_url = self.convert_to_absolute_url(long_url)
+        if not is_valid_long_url(long_url):
+            return Response({'long_url': ['Invalid URL']}, status=400)
+
+        short_url = request.data.get('short_url', '')
+        if short_url == '':
+            short_url = generate_random_short_url()
+
         data = request.data.copy()  # get a mutable copy
         data['long_url'] = long_url
+        data['short_url'] = short_url
 
         serializer = UrlRecordSerializer(data=data)
         if serializer.is_valid():
             long_url = serializer.validated_data['long_url']
-            if not is_valid_long_url(long_url):
-                return Response({'long_url': ['Invalid URL']}, status=400)
 
             short_url = serializer.validated_data['short_url']
             if not is_valid_short_url(short_url):
