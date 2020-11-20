@@ -1,0 +1,4 @@
+{% block content %} 
+<p>Redirect failed! No mapping found...<br><br>Redirect to the shortener page after 5 seconds.</p>
+<meta http-equiv="refresh" content="5;url={% url 'index' %}">
+{% endblock %}

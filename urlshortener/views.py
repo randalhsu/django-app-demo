@@ -3,7 +3,7 @@ import re
 from urllib.parse import urlsplit
 from django.core.validators import ValidationError
 from django.forms import URLField
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework import generics
@@ -37,7 +37,7 @@ def is_valid_long_url(url):
     return True
 
 
-VALID_SHORT_URL_REGEX = r'^[A-Za-z0-9]{1,32}$'
+VALID_SHORT_URL_REGEX = r'(?P<short_url>^[A-Za-z0-9]{1,32}$)'
 
 
 def is_valid_short_url(url):
@@ -110,6 +110,24 @@ class UrlRecordRetrieveView(generics.RetrieveAPIView):
                 else:
                     return Response({'short_url': [f'Must be "{VALID_SHORT_URL_REGEX}"']}, status=400)
         return Response({'short_url': [f'Must be "{VALID_SHORT_URL_REGEX}"']}, status=400)
+
+
+def handle_redirect(request, short_url):
+    try:
+        if record := UrlRecord.objects.get(short_url=short_url):
+            record.visit_count += 1
+            record.save()
+            logger.info(
+                f'[{get_client_ip(request)}] Redirect "{short_url}" -> {record.long_url} (Total {record.visit_count} times)')
+            return HttpResponseRedirect(record.long_url)
+    except UrlRecord.DoesNotExist:
+        pass
+    except UrlRecord.MultipleObjectsReturned:
+        logger.error(
+            f'Impossible! Multiple mappings for short_url={short_url}')
+
+    logger.info(f'[{get_client_ip(request)}] Redirect "{short_url}" failed...')
+    return render(request, 'redirect_failed.html')
 
 
 def index(request):
