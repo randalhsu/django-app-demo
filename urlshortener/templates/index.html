@@ -1,0 +1,164 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css" integrity="sha384-TX8t27EcRE3e/ihU7zmQxVncDAy5uIKz4rEkgIXeMed4M0jlfIDPvg6uqKI2xXr2" crossorigin="anonymous">
+
+    <title>URL Shortener</title>
+  </head>
+<body>
+  <h1>Welcome to the URL Shortener!</h1>
+  <div id="app">
+    <div id="add-url-record-form"><add-url-record-form></add-url-record-form></div>
+    <div id="recent-url-records"><url-record-list></url-record-list></div>
+  </div>
+
+<script src="https://unpkg.com/axios@0.21.0/dist/axios.min.js"></script>
+<script src="https://unpkg.com/vue@3.0.2/dist/vue.global.js"></script>
+<script src="https://unpkg.com/mitt@2.1.0/dist/mitt.umd.js"></script>
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ho+j7jyWK8fNQe+A12Hb8AhRq26LrZ/JpcUGGOn+Y7RsweNrtN/tE3MoK7ZeZDyx" crossorigin="anonymous"></script>
+
+<script>
+function setVisibility(el, isVisible) {
+    el.style.visibility = isVisible ? '' : 'hidden';
+}
+
+//const APP_PATH = 'http://127.0.0.1:8000/url/';
+const APP_PATH = window.location.href;
+const API_PATH = APP_PATH + 'api/v1/urls';
+
+const app = Vue.createApp({});
+const emitter = mitt();
+app.config.globalProperties.emitter = emitter;
+
+const NEW_RECORD_CREATED_EVENT = 'new-record-created';
+
+app.component('add-url-record-form', {
+    data() {
+        return {
+            longUrl: '',
+            shortUrl: '',
+            title: 'Result',
+            resultStatus: 'status',
+            resultHtml: '&nbsp;',
+        };
+    },
+    methods: {
+        pressSubmit: async function(e) {
+            e.preventDefault();
+
+            const submitResult = document.getElementById('submit-result');
+            setVisibility(submitResult, false);
+
+            axios.post(API_PATH, {
+                long_url: this.longUrl,
+                short_url: this.shortUrl,
+            })
+            .then(this.onCreateSucceeded, this.onCreateFailed)
+            .catch(function (error) {
+                console.log(error);
+            }).then(() => setVisibility(submitResult, true));
+        },
+        onCreateSucceeded: function(response) {
+            this.longUrl = response.data.long_url;
+            this.shortUrl = response.data.short_url;
+
+            const linkUrl = APP_PATH + this.shortUrl;
+            this.title = 'Congratulation! Link created ✔';
+            this.resultStatus = response.request.status + ' ' + response.request.statusText;
+            this.resultHtml = `<a href="${linkUrl}" target="_blank">${linkUrl}</a>`;
+            setVisibility(document.getElementById('copy-button'), true);
+            this.emitter.emit(NEW_RECORD_CREATED_EVENT);
+        },
+        onCreateFailed: function(response) {
+            this.title = 'Oooooops! Sorry! 😭';
+            this.resultStatus = response.request.status + ' ' + response.request.statusText;
+            this.resultHtml = `Failed to shorten URL with "${this.shortUrl}" 💔`;
+            setVisibility(document.getElementById('copy-button'), false);
+        },
+        copyLinkToClipboard: function() {
+            const textArea = document.createElement('textarea');
+            textArea.value = APP_PATH + this.shortUrl;
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            let message = 'Oops, unable to copy!';
+            try {
+                if (document.execCommand('copy')) {
+                    message = 'Copied!';
+                }
+            } catch (error) {
+                console.log(error);
+            }
+            const el = document.getElementById('copy-message');
+            el.innerText = message;
+            setTimeout(() => el.innerText = '', 2000);
+
+            document.body.removeChild(textArea);
+        },
+    },
+    delimiters: ['[[', ']]'],
+    template: `
+      <form method="post" @submit="pressSubmit">
+        <label for="long-url">Your URL:&nbsp;</label>
+        <input type="url" id="long-url" name="long_url" v-model="longUrl" autofocus="true" maxlength="2048" size="60" placeholder="https://www.djangoproject.com" required>
+        <br>
+        <label for="short-url">Shorten to:&nbsp;</label>
+        <input type="text" id="short-url" name="short_url" v-model="shortUrl" maxlength="32" size="32" pattern="[A-Za-z0-9]+" placeholder="Empty or [A-Za-z0-9]+">
+        <br>
+        <input type="submit" value="Shorten!">
+      </form>
+      <div id="submit-result" style="visibility: hidden;">
+        <h4>[[ title ]]</h4>
+        <p>HTTP status:&nbsp;[[ resultStatus ]]</p>
+        <p><span v-html="resultHtml"></span></p>
+        <button id="copy-button" @click="copyLinkToClipboard">Copy link to clipboard</button><span id="copy-message"></span>
+      </div>
+    `,
+});
+
+app.component('url-record-list', {
+    data() {
+        return {
+            appPath: APP_PATH,
+            urlRecordList: [],
+            message: '(Database is empty...)',
+        }
+    },
+    methods: {
+        updateList: async function() {
+            try {
+                const response = await axios.get(API_PATH);
+                //console.log(response);
+                this.urlRecordList = response.data;
+                this.message = '';
+            } catch (error) {
+                console.log(error);
+                this.urlRecordList = [];
+                this.message = 'Failed to retrieve data!';
+            }
+        }
+    },
+    mounted() {
+        this.emitter.on(NEW_RECORD_CREATED_EVENT, () => this.updateList());
+        this.updateList();
+    },
+    delimiters: ['[[', ']]'],
+    template: `
+      <h4>Recently Shortened URLs</h4>
+      <ul v-if="urlRecordList.length">
+        <li v-for="record of urlRecordList">
+          <a :href="appPath + record.short_url" target="_blank"> [[ record.short_url ]] </a>&nbsp;&nbsp;➜&nbsp;&nbsp;[[ record.long_url ]]&nbsp;&nbsp;<small>(visited [[ record.visit_count ]] times)</small>
+        </li>
+      </ul>
+      <p v-else>[[ message ]]</p>
+    `,
+});
+
+app.mount('#app');
+</script>
+  </body>
+</html>
