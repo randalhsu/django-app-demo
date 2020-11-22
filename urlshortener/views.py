@@ -5,11 +5,11 @@ import re
 from urllib.parse import urlsplit
 from django.core.validators import ValidationError
 from django.forms import URLField
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import HttpResponseRedirect, QueryDict
 from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework import generics
-from .models import UrlRecord
+from .models import UrlRecord, UrlMappingForm
 from .serializers import UrlRecordSerializer
 
 
@@ -68,14 +68,17 @@ def generate_random_short_url():
 
 class UrlRecordListCreateView(generics.ListCreateAPIView):
     MAX_RECORDS = 10
+    serializer_class = UrlRecordSerializer
 
     def get(self, request):
         logger.info(f'[{get_client_ip(request)}] API List: {request.data}')
-        records = UrlRecord.objects.all()[:type(self).MAX_RECORDS]
+        records = UrlRecord.objects.all().order_by(
+            '-last_modified')[:type(self).MAX_RECORDS]
         serializer = UrlRecordSerializer(records, many=True)
         return Response(serializer.data)
 
-    def convert_to_absolute_url(self, url):
+    @staticmethod
+    def convert_to_absolute_url(url):
         try:
             if urlsplit(url).netloc:
                 return url
@@ -119,6 +122,8 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
 
 
 class UrlRecordRetrieveView(generics.RetrieveAPIView):
+    serializer_class = UrlRecordSerializer
+
     def get(self, request, format=None):
         logger.info(
             f'[{get_client_ip(request)}] API Retrieve: {request.data} / {request.query_params}')
@@ -155,4 +160,22 @@ def handle_redirect(request, short_url):
 
 
 def index(request):
-    return HttpResponse('url index')
+    if request.method == 'POST':
+        form = UrlMappingForm(request.POST)
+        if form.is_valid():
+            logger.info(
+                f'[{get_client_ip(request)}] POST valid form: {form.cleaned_data}')
+            query_dict = QueryDict(mutable=True)
+            query_dict.update(form.cleaned_data)
+            request.data = query_dict
+            response = UrlRecordListCreateView().create(request)
+            context = {
+                'form': form,
+                'status_code': response.status_code,
+                'data': response.data
+            }
+            return render(request, 'index.html', context)
+    else:
+        form = UrlMappingForm()
+
+    return render(request, 'index.html', {'form': form})
