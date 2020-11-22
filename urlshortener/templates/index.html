@@ -27,7 +27,8 @@ function setVisibility(el, isVisible) {
 
 //const APP_PATH = 'http://127.0.0.1:8000/url/';
 const APP_PATH = window.location.href;
-const API_PATH = APP_PATH + 'api/v1/urls';
+const LIST_POST_API_PATH = APP_PATH + 'api/v1/urls';
+const RETRIEVE_API_PATH = APP_PATH + 'api/v1/urls/';
 
 const app = Vue.createApp({});
 const emitter = mitt();
@@ -40,6 +41,7 @@ app.component('add-url-record-form', {
         return {
             longUrl: '',
             shortUrl: '',
+            availabilityMessage: '',
             title: 'Result',
             resultStatus: 'status',
             resultHtml: '&nbsp;',
@@ -52,7 +54,7 @@ app.component('add-url-record-form', {
             const submitResult = document.getElementById('submit-result');
             setVisibility(submitResult, false);
 
-            axios.post(API_PATH, {
+            axios.post(LIST_POST_API_PATH, {
                 long_url: this.longUrl,
                 short_url: this.shortUrl,
             })
@@ -84,7 +86,7 @@ app.component('add-url-record-form', {
             document.body.appendChild(textArea);
             textArea.focus();
             textArea.select();
-            
+
             let message = 'Oops, unable to copy!';
             try {
                 if (document.execCommand('copy')) {
@@ -99,6 +101,36 @@ app.component('add-url-record-form', {
 
             document.body.removeChild(textArea);
         },
+        checkShortUrlAvailability: function(e) {
+            const inputedShortUrl = e.target.value;
+            if (inputedShortUrl.length === 0) {
+                this.availabilityMessage = '';
+                return;
+            }
+            const matchResult = inputedShortUrl.match(/^[A-Za-z0-9]{0,32}$/) || [];
+            if (matchResult.length === 0) {
+                this.availabilityMessage = '🚫 Invalid pattern!';
+                return;
+            }
+            this.availabilityMessage = '';
+
+            axios.get(RETRIEVE_API_PATH, {
+                params: {
+                    short_url: inputedShortUrl,
+                }
+            })
+            .then(function(response) {
+                /* Record already exists, this short URL is unavailable */
+                this.availabilityMessage = '🚫 Occupied!';
+            }.bind(this))
+            .catch(function(error) {
+                /* 404 Not Found, this short URL is available */
+                this.availabilityMessage = '✔ Good';
+            }.bind(this));
+        },
+    },
+    mounted() {
+        document.getElementById('short-url').addEventListener('input', this.checkShortUrlAvailability);
     },
     delimiters: ['[[', ']]'],
     template: `
@@ -108,6 +140,7 @@ app.component('add-url-record-form', {
         <br>
         <label for="short-url">Shorten to:&nbsp;</label>
         <input type="text" id="short-url" name="short_url" v-model="shortUrl" maxlength="32" size="32" pattern="[A-Za-z0-9]+" placeholder="Empty or [A-Za-z0-9]+">
+        <span id="availability-message">[[ availabilityMessage ]]</span>
         <br>
         <input type="submit" value="Shorten!">
       </form>
@@ -131,7 +164,7 @@ app.component('url-record-list', {
     methods: {
         updateList: async function() {
             try {
-                const response = await axios.get(API_PATH);
+                const response = await axios.get(LIST_POST_API_PATH);
                 //console.log(response);
                 this.urlRecordList = response.data;
                 this.message = '';
