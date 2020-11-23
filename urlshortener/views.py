@@ -9,7 +9,7 @@ from django.forms import URLField
 from django.http import HttpResponseRedirect, QueryDict
 from django.shortcuts import render
 from rest_framework.response import Response
-from rest_framework import generics
+from rest_framework import generics, status
 from .models import UrlRecord, UrlMappingForm
 from .serializers import UrlRecordSerializer
 
@@ -56,12 +56,11 @@ def generate_random_short_url():
     SHORT_URL_LENGTH = 6
     RETRY_LIMIT = 5
 
-    while retry := RETRY_LIMIT > 0:
+    for _ in range(RETRY_LIMIT):
         short_url = ''.join(random.choice(CHAR_SET)
                             for _ in range(SHORT_URL_LENGTH))
         if not UrlRecord.objects.filter(short_url=short_url).exists():
             return short_url
-        retry -= 1
 
     logger.error(f'Unable to generate any available random short_url!')
     return ''
@@ -76,48 +75,48 @@ class ErrorReason(enum.Enum):
     MALFORMED_DATA = 1005
 
 
-def build_error_response_content(reason: ErrorReason, *, long_url: str = '', short_url: str = '') -> tuple[dict, int]:
-    '''Builds JSON:API format error response content according to reason.
-    Returns a tuple: (content, http_status_code)
-    '''
-    error = {
-        'code': str(reason.value),
+class UrlAPIErrorResponse(Response):
+    ATTRIBUTES_FOR_REASON = {
+        ErrorReason.INVALID_LONG_URL: {
+            'title': 'Invalid long_url',
+            'detail_template': string.Template("long_url:`$long_url` is not a valid URL"),
+            'status_code': status.HTTP_400_BAD_REQUEST,
+        },
+        ErrorReason.INVALID_SHORT_URL: {
+            'title': 'Invalid short_url',
+            'detail_template': string.Template("short_url:`$short_url` cannot match pattern: ^[A-Za-z0-9]{1,32}$$"),
+            'status_code': status.HTTP_400_BAD_REQUEST,
+        },
+        ErrorReason.SHORT_URL_ALREADY_EXISTS: {
+            'title': 'short_url already exists',
+            'detail_template': string.Template("short_url:`$short_url` is occupied. Please pick another short_url"),
+            'status_code': status.HTTP_409_CONFLICT,
+        },
+        ErrorReason.SHORT_URL_MAPPING_NOT_EXISTS: {
+            'title': 'short_url has no mapping',
+            'detail_template': string.Template("There is no URL to redirect for short_url:`$short_url`"),
+            'status_code': status.HTTP_404_NOT_FOUND,
+        },
+        ErrorReason.MALFORMED_DATA: {
+            'title': 'Malformed data',
+            'detail_template': string.Template('Are you malicious?'),
+            'status_code': status.HTTP_400_BAD_REQUEST,
+        },
     }
 
-    if reason == ErrorReason.INVALID_LONG_URL:
-        error.update({
-            'title': 'Invalid long_url',
-            'detail': string.Template("long_url:`$long_url` is not a valid URL").substitute(long_url=long_url),
-            'status': '400',
-        })
-    elif reason == ErrorReason.INVALID_SHORT_URL:
-        error.update({
-            'title': 'Invalid short_url',
-            'detail': string.Template("short_url:`$short_url` cannot match pattern: $pattern").substitute(short_url=short_url, pattern=VALID_SHORT_URL_REGEX),
-            'status': '400',
-        })
-    elif reason == ErrorReason.SHORT_URL_ALREADY_EXISTS:
-        error.update({
-            'title': 'short_url already exists',
-            'detail': string.Template("short_url:`$short_url` is occupied. Please pick another short_url").substitute(short_url=short_url),
-            'status': '409',
-        })
-    elif reason == ErrorReason.SHORT_URL_MAPPING_NOT_EXISTS:
-        error.update({
-            'title': 'short_url has no mapping',
-            'detail': string.Template("There is no URL to redirect for short_url:`$short_url`").substitute(short_url=short_url),
-            'status': '404',
-        })
-    elif reason == ErrorReason.MALFORMED_DATA:
-        error.update({
-            'title': 'Malformed data',
-            'detail': 'Are you malicious?',
-            'status': '400',
-        })
-    else:
-        raise KeyError(f'Not a valid reason: {reason}')
+    def __init__(self, reason: ErrorReason, *, long_url: str = '', short_url: str = '') -> None:
+        '''Build Response with JSON:API format error content according to reason.'''
 
-    return ({'errors': [error]}, int(error['status']))
+        attributes = type(self).ATTRIBUTES_FOR_REASON[reason]
+        status_code = attributes['status_code']
+
+        error = {
+            'code': str(reason.value),
+            'title': attributes['title'],
+            'detail': attributes['detail_template'].substitute(long_url=long_url, short_url=short_url),
+            'status': str(status_code),
+        }
+        super().__init__({'errors': [error]}, status=status_code)
 
 
 class UrlRecordListCreateView(generics.ListCreateAPIView):
@@ -147,9 +146,7 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
         long_url = request.data.get('long_url', '')
         long_url = self.convert_to_absolute_url(long_url)
         if not is_valid_long_url(long_url):
-            content, status_code = build_error_response_content(
-                ErrorReason.INVALID_LONG_URL, long_url=long_url)
-            return Response(content, status=status_code)
+            return UrlAPIErrorResponse(ErrorReason.INVALID_LONG_URL, long_url=long_url)
 
         short_url = request.data.get('short_url', '')
         if short_url == '':
@@ -165,23 +162,17 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
             short_url = serializer.validated_data['short_url']
 
             if not is_valid_short_url(short_url):
-                content, status_code = build_error_response_content(
-                    ErrorReason.INVALID_SHORT_URL, short_url=short_url)
-                return Response(content, status=status_code)
+                return UrlAPIErrorResponse(ErrorReason.INVALID_SHORT_URL, short_url=short_url)
 
             if UrlRecord.objects.filter(short_url=short_url).exists():
-                content, status_code = build_error_response_content(
-                    ErrorReason.SHORT_URL_ALREADY_EXISTS, short_url=short_url)
-                return Response(content, status=status_code)
+                return UrlAPIErrorResponse(ErrorReason.SHORT_URL_ALREADY_EXISTS, short_url=short_url)
 
             serializer.save()
             logger.info(
                 f'[{get_client_ip(request)}] Created mapping: "{short_url}" -> "{long_url}"')
-            return Response(serializer.data, status=201)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
         else:
-            content, status_code = build_error_response_content(
-                ErrorReason.MALFORMED_DATA)
-            return Response(content, status=status_code)
+            return UrlAPIErrorResponse(ErrorReason.MALFORMED_DATA)
 
 
 class UrlRecordRetrieveView(generics.RetrieveAPIView):
@@ -198,17 +189,11 @@ class UrlRecordRetrieveView(generics.RetrieveAPIView):
                         serializer = UrlRecordSerializer(record)
                         return Response(serializer.data)
                     except:
-                        content, status_code = build_error_response_content(
-                            ErrorReason.SHORT_URL_MAPPING_NOT_EXISTS, short_url=short_url)
-                        return Response(content, status=status_code)
+                        return UrlAPIErrorResponse(ErrorReason.SHORT_URL_MAPPING_NOT_EXISTS, short_url=short_url)
                 else:
-                    content, status_code = build_error_response_content(
-                        ErrorReason.INVALID_SHORT_URL, short_url=short_url)
-                    return Response(content, status=status_code)
+                    return UrlAPIErrorResponse(ErrorReason.INVALID_SHORT_URL, short_url=short_url)
 
-        content, status_code = build_error_response_content(
-            ErrorReason.INVALID_SHORT_URL, short_url='')
-        return Response(content, status=status_code)
+        return UrlAPIErrorResponse(ErrorReason.INVALID_SHORT_URL)
 
 
 def handle_redirect(request, short_url):
@@ -227,7 +212,7 @@ def handle_redirect(request, short_url):
 
     logger.info(f'[{get_client_ip(request)}] Redirect "{short_url}" failed...')
     response = render(request, 'redirect_failed.html')
-    response.status_code = 404
+    response.status_code = status.HTTP_404_NOT_FOUND
     return response
 
 
