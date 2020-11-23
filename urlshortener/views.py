@@ -1,3 +1,4 @@
+import enum
 import logging
 import random
 import string
@@ -66,6 +67,59 @@ def generate_random_short_url():
     return ''
 
 
+@enum.unique
+class ErrorReason(enum.Enum):
+    INVALID_LONG_URL = 1001
+    INVALID_SHORT_URL = 1002
+    SHORT_URL_ALREADY_EXISTS = 1003
+    SHORT_URL_MAPPING_NOT_EXISTS = 1004
+    MALFORMED_DATA = 1005
+
+
+def build_error_response_content(reason: ErrorReason, *, long_url: str = '', short_url: str = '') -> tuple[dict, int]:
+    '''Builds JSON:API format error response content according to reason.
+    Returns a tuple: (content, http_status_code)
+    '''
+    error = {
+        'code': str(reason.value),
+    }
+
+    if reason == ErrorReason.INVALID_LONG_URL:
+        error.update({
+            'title': 'Invalid long_url',
+            'detail': string.Template("long_url:`$long_url` is not a valid URL").substitute(long_url=long_url),
+            'status': '400',
+        })
+    elif reason == ErrorReason.INVALID_SHORT_URL:
+        error.update({
+            'title': 'Invalid short_url',
+            'detail': string.Template("short_url:`$short_url` cannot match pattern: $pattern").substitute(short_url=short_url, pattern=VALID_SHORT_URL_REGEX),
+            'status': '400',
+        })
+    elif reason == ErrorReason.SHORT_URL_ALREADY_EXISTS:
+        error.update({
+            'title': 'short_url already exists',
+            'detail': string.Template("short_url:`$short_url` is occupied. Please pick another short_url").substitute(short_url=short_url),
+            'status': '409',
+        })
+    elif reason == ErrorReason.SHORT_URL_MAPPING_NOT_EXISTS:
+        error.update({
+            'title': 'short_url has no mapping',
+            'detail': string.Template("There is no URL to redirect for short_url:`$short_url`").substitute(short_url=short_url),
+            'status': '404',
+        })
+    elif reason == ErrorReason.MALFORMED_DATA:
+        error.update({
+            'title': 'Malformed data',
+            'detail': 'Are you malicious?',
+            'status': '400',
+        })
+    else:
+        raise KeyError(f'Not a valid reason: {reason}')
+
+    return ({'errors': [error]}, int(error['status']))
+
+
 class UrlRecordListCreateView(generics.ListCreateAPIView):
     MAX_RECORDS = 10
     serializer_class = UrlRecordSerializer
@@ -93,7 +147,9 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
         long_url = request.data.get('long_url', '')
         long_url = self.convert_to_absolute_url(long_url)
         if not is_valid_long_url(long_url):
-            return Response({'long_url': ['Invalid URL']}, status=400)
+            content, status_code = build_error_response_content(
+                ErrorReason.INVALID_LONG_URL, long_url=long_url)
+            return Response(content, status=status_code)
 
         short_url = request.data.get('short_url', '')
         if short_url == '':
@@ -106,19 +162,26 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
         serializer = UrlRecordSerializer(data=data)
         if serializer.is_valid():
             long_url = serializer.validated_data['long_url']
-
             short_url = serializer.validated_data['short_url']
+
             if not is_valid_short_url(short_url):
-                return Response({'short_url': [f'Must be "{VALID_SHORT_URL_REGEX}"']}, status=400)
+                content, status_code = build_error_response_content(
+                    ErrorReason.INVALID_SHORT_URL, short_url=short_url)
+                return Response(content, status=status_code)
+
             if UrlRecord.objects.filter(short_url=short_url).exists():
-                return Response({'short_url': ['Already exists!']}, status=409)
+                content, status_code = build_error_response_content(
+                    ErrorReason.SHORT_URL_ALREADY_EXISTS, short_url=short_url)
+                return Response(content, status=status_code)
 
             serializer.save()
             logger.info(
                 f'[{get_client_ip(request)}] Created mapping: "{short_url}" -> "{long_url}"')
             return Response(serializer.data, status=201)
         else:
-            return Response(serializer.errors, status=400)
+            content, status_code = build_error_response_content(
+                ErrorReason.MALFORMED_DATA)
+            return Response(content, status=status_code)
 
 
 class UrlRecordRetrieveView(generics.RetrieveAPIView):
@@ -135,10 +198,17 @@ class UrlRecordRetrieveView(generics.RetrieveAPIView):
                         serializer = UrlRecordSerializer(record)
                         return Response(serializer.data)
                     except:
-                        return Response({'long_url': ['Not exists!'], 'short_url': short_url}, status=404)
+                        content, status_code = build_error_response_content(
+                            ErrorReason.SHORT_URL_MAPPING_NOT_EXISTS, short_url=short_url)
+                        return Response(content, status=status_code)
                 else:
-                    return Response({'short_url': [f'Must be "{VALID_SHORT_URL_REGEX}"']}, status=400)
-        return Response({'short_url': [f'Must be "{VALID_SHORT_URL_REGEX}"']}, status=400)
+                    content, status_code = build_error_response_content(
+                        ErrorReason.INVALID_SHORT_URL, short_url=short_url)
+                    return Response(content, status=status_code)
+
+        content, status_code = build_error_response_content(
+            ErrorReason.INVALID_SHORT_URL, short_url='')
+        return Response(content, status=status_code)
 
 
 def handle_redirect(request, short_url):
