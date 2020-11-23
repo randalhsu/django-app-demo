@@ -156,7 +156,9 @@ def handle_redirect(request, short_url):
             f'Impossible! Multiple mappings for short_url={short_url}')
 
     logger.info(f'[{get_client_ip(request)}] Redirect "{short_url}" failed...')
-    return render(request, 'redirect_failed.html')
+    response = render(request, 'redirect_failed.html')
+    response.status_code = 404
+    return response
 
 
 def index(request):
