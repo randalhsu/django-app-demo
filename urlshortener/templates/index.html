@@ -27,7 +27,7 @@ function setVisibility(el, isVisible) {
 
 //const APP_PATH = 'http://127.0.0.1:8000/url/';
 const APP_PATH = window.location.href;
-const LIST_POST_API_PATH = APP_PATH + 'api/v1/urls';
+const LIST_CREATE_API_PATH = APP_PATH + 'api/v1/urls';
 const RETRIEVE_API_PATH = APP_PATH + 'api/v1/urls/';
 
 const app = Vue.createApp({});
@@ -47,6 +47,11 @@ app.component('add-url-record-form', {
             resultHtml: '&nbsp;',
         };
     },
+    computed: {
+        isInvalidShortUrl: function() {
+            return this.availabilityMessage.startsWith('🚫');
+        },
+    },
     methods: {
         pressSubmit: async function(e) {
             e.preventDefault();
@@ -54,12 +59,12 @@ app.component('add-url-record-form', {
             const submitResult = document.getElementById('submit-result');
             setVisibility(submitResult, false);
 
-            axios.post(LIST_POST_API_PATH, {
+            axios.post(LIST_CREATE_API_PATH, {
                 long_url: this.longUrl,
                 short_url: this.shortUrl,
             })
             .then(this.onCreateSucceeded, this.onCreateFailed)
-            .catch(function (error) {
+            .catch(function(error) {
                 console.log(error);
             }).then(() => setVisibility(submitResult, true));
         },
@@ -73,6 +78,7 @@ app.component('add-url-record-form', {
             this.resultHtml = `<a href="${linkUrl}" target="_blank">${linkUrl}</a>`;
             setVisibility(document.getElementById('copy-button'), true);
             this.emitter.emit(NEW_RECORD_CREATED_EVENT);
+            this.availabilityMessage = '';
         },
         onCreateFailed: function(response) {
             this.title = 'Oooooops! Sorry! 😭';
@@ -124,12 +130,15 @@ app.component('add-url-record-form', {
                 this.availabilityMessage = '🚫 Occupied!';
             }.bind(this))
             .catch(function(error) {
-                /* 404 Not Found, this short URL is available */
-                this.availabilityMessage = '✔ Good';
+                if (error.message.endsWith('404')) {
+                    /* 'Request failed with status code 404', this short URL is available */
+                    this.availabilityMessage = '✔ Good';
+                }
             }.bind(this));
         },
     },
     mounted() {
+        document.getElementById('short-url').addEventListener('focus', this.checkShortUrlAvailability);
         document.getElementById('short-url').addEventListener('input', this.checkShortUrlAvailability);
     },
     delimiters: ['[[', ']]'],
@@ -142,7 +151,7 @@ app.component('add-url-record-form', {
         <input type="text" id="short-url" name="short_url" v-model="shortUrl" maxlength="32" size="32" pattern="[A-Za-z0-9]+" placeholder="Empty or [A-Za-z0-9]+">
         <span id="availability-message">[[ availabilityMessage ]]</span>
         <br>
-        <input type="submit" value="Shorten!">
+        <input type="submit" id="submit-button" value="Shorten!" :disabled="isInvalidShortUrl">
       </form>
       <div id="submit-result" style="visibility: hidden;">
         <h4>[[ title ]]</h4>
@@ -158,16 +167,16 @@ app.component('url-record-list', {
         return {
             appPath: APP_PATH,
             urlRecordList: [],
-            message: '(Database is empty...)',
+            message: '',
         }
     },
     methods: {
         updateList: async function() {
             try {
-                const response = await axios.get(LIST_POST_API_PATH);
+                const response = await axios.get(LIST_CREATE_API_PATH);
                 //console.log(response);
                 this.urlRecordList = response.data;
-                this.message = '';
+                this.message = this.urlRecordList.length > 0 ? '' : '(Database is empty...)';
             } catch (error) {
                 console.log(error);
                 this.urlRecordList = [];
