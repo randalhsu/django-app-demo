@@ -14,8 +14,9 @@ MAX_SHORT_URL_LENGTH = 32
 class UrlRecord(models.Model):
     long_url = models.URLField(max_length=MAX_LONG_URL_LENGTH)
     short_url = models.CharField(max_length=MAX_SHORT_URL_LENGTH)
-    last_modified = models.DateTimeField(auto_now=True)
-    expire_time = models.DateTimeField(default=one_minute_later)
+    # create_time = models.DateTimeField(auto_now_add=True)
+    # expire_time = models.DateTimeField(default=one_minute_later)
+    last_activity_time = models.DateTimeField(auto_now=True)
     visit_count = models.IntegerField(default=0)
     # TODO: add owner?
 

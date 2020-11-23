@@ -127,7 +127,7 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
     def get(self, request):
         logger.info(f'[{get_client_ip(request)}] API List: {request.data}')
         records = UrlRecord.objects.all().order_by(
-            '-last_modified')[:type(self).MAX_RECORDS]
+            '-last_activity_time')[:type(self).MAX_RECORDS]
         serializer = UrlRecordSerializer(records, many=True)
         return Response(serializer.data)
 

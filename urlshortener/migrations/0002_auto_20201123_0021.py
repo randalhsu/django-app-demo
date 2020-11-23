@@ -14,7 +14,8 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='urlrecord',
             name='expire_time',
-            field=models.DateTimeField(default=urlshortener.models.one_minute_later),
+            field=models.DateTimeField(
+                default=urlshortener.models.one_minute_later),
         ),
         migrations.AlterField(
             model_name='urlrecord',
