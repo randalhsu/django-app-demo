@@ -4,7 +4,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from .models import UrlRecord
 from .serializers import UrlRecordSerializer
-from .views import handle_redirect, UrlRecordListCreateView
+from .views import UrlRecordListCreateView, VALID_SHORT_URL_REGEX
 
 
 class RestAPITestCase(TestCase):
@@ -87,6 +87,14 @@ class RestAPITestCase(TestCase):
         response = self.client.post(
             reverse('list_create_url'), data, content_type='application/json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        # POST with empty short_url, check generated short_url
+        response = self.client.post(
+            reverse('list_create_url'), {'long_url': 'w3.org'})
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        short_url = response.data['short_url']
+        self.assertRegex(short_url, VALID_SHORT_URL_REGEX)
+        self.assertEqual(len(short_url), 6)
 
     def test_create_invalid_record(self):
         # long_url invalid
