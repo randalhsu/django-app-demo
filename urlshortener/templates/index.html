@@ -8,10 +8,10 @@
     <title>URL Shortener</title>
   </head>
 <body>
-  <h1>Welcome to the URL Shortener!</h1>
-  <div id="app">
-    <div id="add-url-record-form"><add-url-record-form></add-url-record-form></div>
-    <div id="recent-url-records"><url-record-list></url-record-list></div>
+  <h2 class="text-center my-5">Welcome to the URL Shortener!</h2>
+  <div id="app" class="container">
+    <div id="add-url-record-form" class="container"><add-url-record-form></add-url-record-form></div>
+    <div id="recent-url-records" class="container"><url-record-list></url-record-list></div>
   </div>
 
 <script src="https://unpkg.com/axios@0.21.0/dist/axios.min.js"></script>
@@ -74,7 +74,7 @@ app.component('add-url-record-form', {
 
             const linkUrl = APP_PATH + this.shortUrl;
             this.title = 'Congratulation! Link created ✔';
-            this.resultStatus = response.request.status + ' ' + response.request.statusText;
+            this.resultStatus = `${response.request.status} ${response.request.statusText}`;
             this.resultHtml = `<a href="${linkUrl}" target="_blank">${linkUrl}</a>`;
             setVisibility(document.getElementById('copy-button'), true);
             this.emitter.emit(NEW_RECORD_CREATED_EVENT);
@@ -82,7 +82,7 @@ app.component('add-url-record-form', {
         },
         onCreateFailed: function(response) {
             this.title = 'Oooooops! Sorry! 😭';
-            this.resultStatus = response.request.status + ' ' + response.request.statusText;
+            this.resultStatus = `${response.request.status} ${response.request.statusText}`;
             this.resultHtml = `Failed to shorten URL with "${this.shortUrl}" 💔`;
             setVisibility(document.getElementById('copy-button'), false);
         },
@@ -144,20 +144,24 @@ app.component('add-url-record-form', {
     delimiters: ['[[', ']]'],
     template: `
       <form method="post" @submit="pressSubmit">
-        <label for="long-url">Your URL:&nbsp;</label>
-        <input type="url" id="long-url" name="long_url" v-model="longUrl" autofocus="true" maxlength="2048" size="60" placeholder="https://www.djangoproject.com" required>
-        <br>
-        <label for="short-url">Shorten to:&nbsp;</label>
-        <input type="text" id="short-url" name="short_url" v-model="shortUrl" maxlength="32" size="32" pattern="[A-Za-z0-9]+" placeholder="Empty or [A-Za-z0-9]+">
-        <span id="availability-message">[[ availabilityMessage ]]</span>
-        <br>
-        <input type="submit" id="submit-button" value="Shorten!" :disabled="isInvalidShortUrl">
+        <div class="form-group row">
+          <label for="long-url" class="col-sm-2 col-form-lable" style="padding-top: 6px;">Your URL</label>
+          <input type="url" id="long-url" class="col-sm-10 form-control" name="long_url" v-model="longUrl" autofocus="true" maxlength="2048" placeholder="https://www.djangoproject.com" required>
+        </div>
+        <div class="form-group row">
+          <label for="short-url" class="col-sm-2 col-form-label">Shorten to</label>
+          <input type="text" id="short-url" class="col-sm-5 form-control" name="short_url" v-model="shortUrl" maxlength="32" pattern="[A-Za-z0-9]+" placeholder="Empty or [A-Za-z0-9]+">
+          <span id="availability-message" class="form-text col-sm-5 text-muted">[[ availabilityMessage ]]</span>
+        </div>
+        <button type="submit" id="submit-button" class="btn btn-primary btn-lg" :disabled="isInvalidShortUrl">Shorten!</button> 
       </form>
-      <div id="submit-result" style="visibility: hidden;">
-        <h4>[[ title ]]</h4>
-        <p>HTTP status:&nbsp;[[ resultStatus ]]</p>
-        <p><span v-html="resultHtml"></span></p>
-        <button id="copy-button" @click="copyLinkToClipboard">Copy link to clipboard</button><span id="copy-message"></span>
+      <div id="submit-result" class="card my-3" style="visibility: hidden;">
+        <div class="card-body">
+          <h4 class="card-title">[[ title ]]</h4>
+          <p class="card-text">HTTP status:&nbsp;[[ resultStatus ]]</p>
+          <p class="card-text"><span v-html="resultHtml"></span></p>
+          <button id="copy-button" class="btn btn-success" @click="copyLinkToClipboard">Copy link to clipboard</button><span id="copy-message" class="ml-3"></span>
+        </div>
       </div>
     `,
 });
@@ -190,9 +194,9 @@ app.component('url-record-list', {
     },
     delimiters: ['[[', ']]'],
     template: `
-      <h4>Recently Shortened URLs</h4>
-      <ul v-if="urlRecordList.length">
-        <li v-for="record of urlRecordList">
+      <ul v-if="urlRecordList.length" class="list-group">
+        <li class="list-group-item active">Recent Activities of Database</li>
+        <li v-for="record of urlRecordList" class="list-group-item">
           <a :href="appPath + record.short_url" target="_blank"> [[ record.short_url ]] </a>&nbsp;&nbsp;➜&nbsp;&nbsp;[[ record.long_url ]]&nbsp;&nbsp;<small>(visited [[ record.visit_count ]] times)</small>
         </li>
       </ul>
