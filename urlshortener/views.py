@@ -11,7 +11,7 @@ from django.shortcuts import render
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework import generics, status
-from .models import UrlRecord, UrlMappingForm
+from .models import MAX_LONG_URL_LENGTH, UrlRecord, UrlMappingForm
 from .serializers import UrlRecordSerializer
 
 
@@ -73,6 +73,9 @@ def is_valid_long_url(url: str) -> bool:
     try:
         url = field.clean(url)
     except ValidationError:
+        return False
+
+    if len(url) > MAX_LONG_URL_LENGTH:
         return False
     return True
 
@@ -213,6 +216,7 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
             Response: Response for API creating a new URL mapping record.
         '''
         logger.info(f'[{get_client_ip(request)}] API Create: {request.data}')
+
         long_url = request.data.get('long_url', '')
         long_url = convert_to_absolute_url(long_url)
         if not is_valid_long_url(long_url):
@@ -225,6 +229,9 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
             except RuntimeError:
                 return UrlAPIErrorResponse(ErrorReason.INVALID_SHORT_URL, short_url=short_url)
 
+        if not is_valid_short_url(short_url):
+            return UrlAPIErrorResponse(ErrorReason.INVALID_SHORT_URL, short_url=short_url)
+
         # Now both long_url and short_url should be valid.
         # Write long_url (converted to absolute URL) and short_url (maybe generated) back to data.
         data = request.data.copy()  # get a mutable copy
@@ -236,9 +243,6 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
             long_url = serializer.validated_data['long_url']
             short_url = serializer.validated_data['short_url']
 
-            if not is_valid_short_url(short_url):
-                return UrlAPIErrorResponse(ErrorReason.INVALID_SHORT_URL, short_url=short_url)
-
             if UrlRecord.objects.filter(short_url=short_url).exists():
                 return UrlAPIErrorResponse(ErrorReason.SHORT_URL_ALREADY_EXISTS, short_url=short_url)
 
@@ -246,8 +250,8 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
             logger.info(
                 f'[{get_client_ip(request)}] Created mapping: "{short_url}" -> "{long_url}"')
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-        else:
-            return UrlAPIErrorResponse(ErrorReason.MALFORMED_DATA)
+
+        return UrlAPIErrorResponse(ErrorReason.MALFORMED_DATA)
 
 
 class UrlRecordRetrieveView(generics.RetrieveAPIView):

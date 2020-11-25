@@ -98,29 +98,28 @@ class RestAPITestCase(TestCase):
 
     def test_create_invalid_record(self):
         # long_url invalid
-        data = {'long_url': 'wtf', 'short_url': 'wtf'}
-        response = self.client.post(reverse('list_create_url'), data)
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        error = response.data['errors'][0]
-        self.assertEqual(error['title'], 'Invalid long_url')
-
-        response = self.client.post(reverse('list_create_url'), {
-                                    'long_url': '//w3.org', 'short_url': 'root'})
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        for long_url in ('wtf', 'htt://w3.org', 'http://www.' + ('0' * 3000) + '.com'):
+            data = {'long_url': long_url, 'short_url': ''}
+            response = self.client.post(reverse('list_create_url'), data)
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+            error = response.data['errors'][0]
+            self.assertEqual(error['title'], 'Invalid long_url')
 
         # short_url pattern not match
-        data = {'long_url': 'w3.org', 'short_url': '; drop urlrecords --'}
-        response = self.client.post(reverse('list_create_url'), data)
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        error = response.data['errors'][0]
-        self.assertEqual(error['title'], 'Invalid short_url')
+        for short_url in ('; drop urlrecords --', '#', '/*', '/* --', '--', "'''", '"""'):
+            data = {'long_url': 'w3.org', 'short_url': short_url}
+            response = self.client.post(reverse('list_create_url'), data)
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+            error = response.data['errors'][0]
+            self.assertEqual(error['title'], 'Invalid short_url')
 
-        # short_url pattern too long, try to bypass form validation
-        data = {'long_url': 'w3.org', 'short_url': '0' * 33}
-        response = self.client.post(reverse('list_create_url'), data)
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        error = response.data['errors'][0]
-        self.assertEqual(error['title'], 'Malformed data')
+        # short_url pattern too long, trying to bypass form validation
+        for length in (33, 34, 3000):
+            data = {'long_url': 'w3.org', 'short_url': '0' * length}
+            response = self.client.post(reverse('list_create_url'), data)
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+            error = response.data['errors'][0]
+            self.assertEqual(error['title'], 'Invalid short_url')
 
         # already exists
         data = {'long_url': 'w3.org', 'short_url': 'short'}
