@@ -6,8 +6,9 @@ import re
 from urllib.parse import urlsplit
 from django.core.validators import ValidationError
 from django.forms import URLField
-from django.http import HttpResponseRedirect, QueryDict
+from django.http import HttpResponse, HttpResponseRedirect, QueryDict
 from django.shortcuts import render
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework import generics, status
 from .models import UrlRecord, UrlMappingForm
@@ -23,7 +24,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_client_ip(request):
+def get_client_ip(request: Request) -> str:
+    '''Parse client's IP string from request.
+
+    Args:
+        request(Request): The incoming request.
+
+    Returns:
+        str: Client's IP string.
+    '''
     if x_forwarded_for := request.META.get('HTTP_X_FORWARDED_FOR'):
         ip = x_forwarded_for.split(',')[-1]
     else:
@@ -32,6 +41,16 @@ def get_client_ip(request):
 
 
 def convert_to_absolute_url(url: str) -> str:
+    '''Convert a relative URL like "python.org" to "http://python.org" by simple prepending.
+    The url will remain untouched if it is already an absolute URL.
+
+    Args:
+        url(str): An URL.
+
+    Returns:
+        str: An absolute URL.
+    '''
+
     try:
         if urlsplit(url).netloc:
             return url
@@ -42,6 +61,14 @@ def convert_to_absolute_url(url: str) -> str:
 
 
 def is_valid_long_url(url: str) -> bool:
+    '''Check if the url is a valid aboslute URL.
+
+    Args:
+        url(str): The URL to check.
+
+    Returns:
+        bool: Whether the URL is valid or not.
+    '''
     field = URLField()
     try:
         url = field.clean(url)
@@ -54,16 +81,34 @@ VALID_SHORT_URL_REGEX = r'(?P<short_url>^[A-Za-z0-9]{1,32}$)'
 DEFAULT_SHORT_URL_LENGTH = 6
 
 
-def is_valid_short_url(url: str) -> bool:
-    if re.match(VALID_SHORT_URL_REGEX, url) is None:
+def is_valid_short_url(short_url: str) -> bool:
+    '''Check if the short_url is a valid for REST API.
+
+    Args:
+        short_url (str): The short_url to check.
+
+    Returns:
+        bool: Whether the short_url is valid or not.
+    '''
+    if re.match(VALID_SHORT_URL_REGEX, short_url) is None:
         return False
-    if url == 'api':
+    if short_url == 'api':
         return False
     return True
 
 
 def generate_random_short_url(length: int = DEFAULT_SHORT_URL_LENGTH) -> str:
-    '''Return a uncollided short_url with length.'''
+    '''Generate a uncollided short_url with certain length.
+
+    Args:
+        length(int, optional): The length of short_url. Defaults to DEFAULT_SHORT_URL_LENGTH.
+
+    Raises:
+        RuntimeError: Cannot generate a valid short_url.
+
+    Returns:
+        str: The generated short_url for REST API.
+    '''
     CHAR_SET = string.ascii_letters + string.digits
     RETRY_LIMIT = 5
 
@@ -71,13 +116,13 @@ def generate_random_short_url(length: int = DEFAULT_SHORT_URL_LENGTH) -> str:
         short_url = ''.join(random.sample(CHAR_SET, length))
         if not UrlRecord.objects.filter(short_url=short_url).exists():
             return short_url
-
-    logger.error(f'Unable to generate any available random short_url!')
-    return ''
+    raise RuntimeError('Unable to generate any available random short_url!')
 
 
 @enum.unique
 class ErrorReason(enum.Enum):
+    '''Aggregated class for REST API error codes.'''
+
     INVALID_LONG_URL = 1001
     INVALID_SHORT_URL = 1002
     SHORT_URL_ALREADY_EXISTS = 1003
@@ -86,6 +131,8 @@ class ErrorReason(enum.Enum):
 
 
 class UrlAPIErrorResponse(Response):
+    '''Response class specialized for responding an REST API error.'''
+
     ATTRIBUTES_FOR_REASON = {
         ErrorReason.INVALID_LONG_URL: {
             'title': 'Invalid long_url',
@@ -115,7 +162,13 @@ class UrlAPIErrorResponse(Response):
     }
 
     def __init__(self, reason: ErrorReason, *, long_url: str = '', short_url: str = '') -> None:
-        '''Build Response with JSON:API format error content according to reason.'''
+        '''Build Response with JSON:API format error content according to reason.
+
+        Args:
+            reason(ErrorReason): The reason causing this UrlAPIErrorResponse.
+            long_url(str, optional): Error triggerer's long_url. Defaults to ''.
+            short_url(str, optional): Error triggerer's short_url. Defaults to ''.
+        '''
 
         attributes = type(self).ATTRIBUTES_FOR_REASON[reason]
         status_code = attributes['status_code']
@@ -130,17 +183,35 @@ class UrlAPIErrorResponse(Response):
 
 
 class UrlRecordListCreateView(generics.ListCreateAPIView):
+    '''View class specialized for handling List and Create REST API.'''
+
     MAX_RECORDS = 10
     serializer_class = UrlRecordSerializer
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
+        '''Handler for GET API listing recent URL mapping records.
+
+        Args:
+            request (Request): The incoming request.
+
+        Returns:
+            Response: Response for API listing URL mapping records.
+        '''
         logger.info(f'[{get_client_ip(request)}] API List: {request.data}')
         records = UrlRecord.objects.all().order_by(
             '-last_activity_time')[:type(self).MAX_RECORDS]
         serializer = UrlRecordSerializer(records, many=True)
         return Response(serializer.data)
 
-    def create(self, request, format=None):
+    def create(self, request: Request) -> Response:
+        '''Handler for POST API creating a new URL mapping record.
+
+        Args:
+            request (Request): The incoming request.
+
+        Returns:
+            Response: Response for API creating a new URL mapping record.
+        '''
         logger.info(f'[{get_client_ip(request)}] API Create: {request.data}')
         long_url = request.data.get('long_url', '')
         long_url = convert_to_absolute_url(long_url)
@@ -149,8 +220,13 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
 
         short_url = request.data.get('short_url', '')
         if short_url == '':
-            short_url = generate_random_short_url()
+            try:
+                short_url = generate_random_short_url()
+            except RuntimeError:
+                return UrlAPIErrorResponse(ErrorReason.INVALID_SHORT_URL, short_url=short_url)
 
+        # Now both long_url and short_url should be valid.
+        # Write long_url (converted to absolute URL) and short_url (maybe generated) back to data.
         data = request.data.copy()  # get a mutable copy
         data['long_url'] = long_url
         data['short_url'] = short_url
@@ -175,9 +251,19 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
 
 
 class UrlRecordRetrieveView(generics.RetrieveAPIView):
+    '''View class specialized for handling Retrieve REST API.'''
+
     serializer_class = UrlRecordSerializer
 
-    def get(self, request, format=None):
+    def get(self, request: Request) -> Response:
+        '''Handler for GET API retrieving an URL mapping record.
+
+        Args:
+            request (Request): The incoming request.
+
+        Returns:
+            Response: Response for API retrieving an URL mapping record.
+        '''
         logger.info(
             f'[{get_client_ip(request)}] API Retrieve: {request.data} / {request.query_params}')
         for params in (request.data, request.query_params):
@@ -195,7 +281,17 @@ class UrlRecordRetrieveView(generics.RetrieveAPIView):
         return UrlAPIErrorResponse(ErrorReason.INVALID_SHORT_URL)
 
 
-def handle_redirect(request, short_url):
+def handle_redirect(request: Request, short_url: str) -> Response:
+    '''Handler for requesting a redirect from short_url.
+    If failed to find the mapping record, return 404 Response.
+
+    Args:
+        request (Request): The incoming request.
+        short_url (str): Requested short_url to redirect.
+
+    Returns:
+        Response: Redirect response.
+    '''
     try:
         if record := UrlRecord.objects.get(short_url=short_url):
             record.visit_count += 1
@@ -215,7 +311,15 @@ def handle_redirect(request, short_url):
     return response
 
 
-def index(request):
+def index(request: Request) -> HttpResponse:
+    '''Handler for requesting the index page of this app.
+
+    Args:
+        request (Request): The incoming request.
+
+    Returns:
+        Response: Http response.
+    '''
     if request.method == 'POST':
         form = UrlMappingForm(request.POST)
         if form.is_valid():

@@ -12,19 +12,22 @@ MAX_SHORT_URL_LENGTH = 32
 
 
 class UrlRecord(models.Model):
+    '''Main model for the mapping of "short_url" -> "long_url" redirect record.'''
+
     long_url = models.URLField(max_length=MAX_LONG_URL_LENGTH)
     short_url = models.CharField(max_length=MAX_SHORT_URL_LENGTH)
     # create_time = models.DateTimeField(auto_now_add=True)
     # expire_time = models.DateTimeField(default=one_minute_later)
     last_activity_time = models.DateTimeField(auto_now=True)
     visit_count = models.IntegerField(default=0)
-    # TODO: add owner?
 
     class Meta:
         db_table = 'urlrecords'
 
 
 class UrlMappingForm(forms.ModelForm):
+    '''Form for validating user input "short_url" and "long_url".'''
+
     long_url = forms.URLField(
         label='Your URL:',
         max_length=MAX_LONG_URL_LENGTH,
