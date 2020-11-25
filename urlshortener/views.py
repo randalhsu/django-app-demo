@@ -3,6 +3,7 @@ import logging
 import random
 import string
 import re
+import sys
 from urllib.parse import urlsplit
 from django.core.validators import ValidationError
 from django.forms import URLField
@@ -126,6 +127,7 @@ def generate_random_short_url(length: int = DEFAULT_SHORT_URL_LENGTH) -> str:
 class ErrorReason(enum.Enum):
     '''Aggregated class for REST API error codes.'''
 
+    INTERNAL_SERVER_ERROR = 1000
     INVALID_LONG_URL = 1001
     INVALID_SHORT_URL = 1002
     SHORT_URL_ALREADY_EXISTS = 1003
@@ -137,6 +139,11 @@ class UrlAPIErrorResponse(Response):
     '''Response class specialized for responding an REST API error.'''
 
     ATTRIBUTES_FOR_REASON = {
+        ErrorReason.INTERNAL_SERVER_ERROR: {
+            'title': 'Internal server error',
+            'detail_template': string.Template("The server cannot handle this request."),
+            'status_code': status.HTTP_500_INTERNAL_SERVER_ERROR,
+        },
         ErrorReason.INVALID_LONG_URL: {
             'title': 'Invalid long_url',
             'detail_template': string.Template("long_url:`$long_url` is not a valid URL"),
@@ -201,10 +208,15 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
             Response: Response for API listing URL mapping records.
         '''
         logger.info(f'[{get_client_ip(request)}] API List: {request.data}')
-        records = UrlRecord.objects.all().order_by(
-            '-last_activity_time')[:type(self).MAX_RECORDS]
-        serializer = UrlRecordSerializer(records, many=True)
-        return Response(serializer.data)
+        try:
+            records = UrlRecord.objects.all().order_by(
+                '-last_activity_time')[:type(self).MAX_RECORDS]
+            serializer = UrlRecordSerializer(records, many=True)
+            return Response(serializer.data)
+        except:
+            logger.error('Unexpected error:', sys.exc_info()[0])
+
+        return UrlAPIErrorResponse(ErrorReason.INTERNAL_SERVER_ERROR)
 
     def create(self, request: Request) -> Response:
         '''Handler for POST API creating a new URL mapping record.
