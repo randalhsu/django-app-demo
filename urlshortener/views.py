@@ -31,7 +31,17 @@ def get_client_ip(request):
     return ip.strip()
 
 
-def is_valid_long_url(url):
+def convert_to_absolute_url(url: str) -> str:
+    try:
+        if urlsplit(url).netloc:
+            return url
+        else:
+            return 'http://' + url
+    except:
+        return url
+
+
+def is_valid_long_url(url: str) -> bool:
     field = URLField()
     try:
         url = field.clean(url)
@@ -41,9 +51,10 @@ def is_valid_long_url(url):
 
 
 VALID_SHORT_URL_REGEX = r'(?P<short_url>^[A-Za-z0-9]{1,32}$)'
+DEFAULT_SHORT_URL_LENGTH = 6
 
 
-def is_valid_short_url(url):
+def is_valid_short_url(url: str) -> bool:
     if re.match(VALID_SHORT_URL_REGEX, url) is None:
         return False
     if url == 'api':
@@ -51,14 +62,13 @@ def is_valid_short_url(url):
     return True
 
 
-def generate_random_short_url():
+def generate_random_short_url(length: int = DEFAULT_SHORT_URL_LENGTH) -> str:
+    '''Return a uncollided short_url with length.'''
     CHAR_SET = string.ascii_letters + string.digits
-    SHORT_URL_LENGTH = 6
     RETRY_LIMIT = 5
 
     for _ in range(RETRY_LIMIT):
-        short_url = ''.join(random.choice(CHAR_SET)
-                            for _ in range(SHORT_URL_LENGTH))
+        short_url = ''.join(random.sample(CHAR_SET, length))
         if not UrlRecord.objects.filter(short_url=short_url).exists():
             return short_url
 
@@ -130,21 +140,10 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
         serializer = UrlRecordSerializer(records, many=True)
         return Response(serializer.data)
 
-    @staticmethod
-    def convert_to_absolute_url(url):
-        try:
-            if urlsplit(url).netloc:
-                return url
-            else:
-                return 'http://' + url
-        except:
-            return url
-
     def create(self, request, format=None):
-        # TODO: Rate Limit
         logger.info(f'[{get_client_ip(request)}] API Create: {request.data}')
         long_url = request.data.get('long_url', '')
-        long_url = self.convert_to_absolute_url(long_url)
+        long_url = convert_to_absolute_url(long_url)
         if not is_valid_long_url(long_url):
             return UrlAPIErrorResponse(ErrorReason.INVALID_LONG_URL, long_url=long_url)
 
