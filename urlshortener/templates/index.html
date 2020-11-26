@@ -11,8 +11,13 @@
   <h2 class="text-center my-5">Welcome to the URL Shortener!</h2>
   <div id="app" class="container">
     <div id="add-url-record-form" class="container"><add-url-record-form></add-url-record-form></div>
+    <div class="container my-4">
+      <a href="api/v1/urls" target="_blank"><button class="btn btn-info mr-4">Open Browsable API for List/Create</button></a>
+      <a href="api/v1/urls/short" target="_blank"><button class="btn btn-info mr-4">Open Browsable API for Retrieve</button></a>
+    </div>
     <div id="recent-url-records" class="container"><url-record-list></url-record-list></div>
   </div>
+  <h4 class="text-center my-5">[<a href="https://github.com/randalhsu/django-url-shortener">GitHub</a>]</h4>
 
 <script src="https://unpkg.com/axios@0.21.0/dist/axios.min.js"></script>
 <script src="https://unpkg.com/vue@3.0.2/dist/vue.global.js"></script>
