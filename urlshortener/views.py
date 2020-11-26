@@ -2,6 +2,7 @@ import enum
 import logging
 import random
 import string
+from string import Template
 import re
 import sys
 from urllib.parse import urlsplit
@@ -141,32 +142,32 @@ class UrlAPIErrorResponse(Response):
     ATTRIBUTES_FOR_REASON = {
         ErrorReason.INTERNAL_SERVER_ERROR: {
             'title': 'Internal server error',
-            'detail_template': string.Template("The server cannot handle this request."),
+            'detail_template': Template("The server cannot handle this request."),
             'status_code': status.HTTP_500_INTERNAL_SERVER_ERROR,
         },
         ErrorReason.INVALID_LONG_URL: {
             'title': 'Invalid long_url',
-            'detail_template': string.Template("long_url:`$long_url` is not a valid URL"),
+            'detail_template': Template("long_url:`$long_url` is not a valid URL"),
             'status_code': status.HTTP_400_BAD_REQUEST,
         },
         ErrorReason.INVALID_SHORT_URL: {
             'title': 'Invalid short_url',
-            'detail_template': string.Template("short_url:`$short_url` cannot match pattern: ^[A-Za-z0-9]{1,32}$$"),
+            'detail_template': Template("short_url:`$short_url` cannot match pattern: ^[A-Za-z0-9]{1,32}$$"),
             'status_code': status.HTTP_400_BAD_REQUEST,
         },
         ErrorReason.SHORT_URL_ALREADY_EXISTS: {
             'title': 'short_url already exists',
-            'detail_template': string.Template("short_url:`$short_url` is occupied. Please pick another short_url"),
+            'detail_template': Template("short_url:`$short_url` is occupied. Please pick another short_url"),
             'status_code': status.HTTP_409_CONFLICT,
         },
         ErrorReason.SHORT_URL_MAPPING_NOT_EXISTS: {
             'title': 'short_url has no mapping',
-            'detail_template': string.Template("There is no URL to redirect for short_url:`$short_url`"),
+            'detail_template': Template("There is no URL to redirect for short_url:`$short_url`"),
             'status_code': status.HTTP_404_NOT_FOUND,
         },
         ErrorReason.MALFORMED_DATA: {
             'title': 'Malformed data',
-            'detail_template': string.Template('Are you malicious?'),
+            'detail_template': Template('Are you malicious?'),
             'status_code': status.HTTP_400_BAD_REQUEST,
         },
     }
@@ -209,7 +210,8 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
         Returns:
             Response: Response for API listing URL mapping records.
         '''
-        logger.info(f'[{get_client_ip(request)}] API List: {request.data}')
+        logger.info(Template('[$ip] API List: $data').substitute(
+            ip=get_client_ip(request), data=request.data))
         try:
             serializer = UrlRecordSerializer(self.get_queryset(), many=True)
             return Response(serializer.data)
@@ -227,7 +229,8 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
         Returns:
             Response: Response for API creating a new URL mapping record.
         '''
-        logger.info(f'[{get_client_ip(request)}] API Create: {request.data}')
+        logger.info(Template('[$ip] API Create: $data').substitute(
+            ip=get_client_ip(request), data=request.data))
 
         long_url = request.data.get('long_url', '')
         long_url = convert_to_absolute_url(long_url)
@@ -260,8 +263,8 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
                 return UrlAPIErrorResponse(ErrorReason.SHORT_URL_ALREADY_EXISTS, short_url=short_url)
 
             serializer.save()
-            logger.info(
-                f'[{get_client_ip(request)}] Created mapping: "{short_url}" -> "{long_url}"')
+            logger.info(Template('[$ip] Created mapping: `$short_url` -> `$long_url`').substitute(
+                ip=get_client_ip(request), short_url=short_url, long_url=long_url))
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         return UrlAPIErrorResponse(ErrorReason.MALFORMED_DATA)
@@ -293,7 +296,8 @@ class UrlRecordRetrieveView(generics.RetrieveAPIView):
             # Request comes from URL param
             pass
 
-        logger.info(f'[{get_client_ip(request)}] API Retrieve: {short_url}')
+        logger.info(Template('[$ip] API Retrieve: `$short_url`').substitute(
+            ip=get_client_ip(request), short_url=short_url))
 
         if is_valid_short_url(short_url):
             try:
@@ -321,8 +325,8 @@ def handle_redirect(request: Request, short_url: str) -> Response:
         if record := UrlRecord.objects.get(short_url=short_url):
             record.visit_count += 1
             record.save()
-            logger.info(
-                f'[{get_client_ip(request)}] Redirect "{short_url}" -> {record.long_url} (Total {record.visit_count} times)')
+            logger.info(Template('[$ip] Redirect `$short_url` -> `$long_url` (total $count times)').substitute(
+                ip=get_client_ip(request), short_url=short_url, long_url=record.long_url, count=record.visit_count))
             return HttpResponseRedirect(record.long_url)
     except UrlRecord.DoesNotExist:
         pass
@@ -330,7 +334,8 @@ def handle_redirect(request: Request, short_url: str) -> Response:
         logger.error(
             f'Impossible! Multiple mappings for short_url={short_url}')
 
-    logger.info(f'[{get_client_ip(request)}] Redirect "{short_url}" failed...')
+    logger.info(Template('[$ip] Redirect `$short_url` failed...').substitute(
+        ip=get_client_ip(request), short_url=short_url))
     response = render(request, 'redirect_failed.html')
     response.status_code = status.HTTP_404_NOT_FOUND
     return response
@@ -348,8 +353,8 @@ def index(request: Request) -> HttpResponse:
     if request.method == 'POST':
         form = UrlMappingForm(request.POST)
         if form.is_valid():
-            logger.info(
-                f'[{get_client_ip(request)}] POST valid form: {form.cleaned_data}')
+            logger.info(Template('[$ip] POST valid form: `$data`').substitute(
+                ip=get_client_ip(request), data=form.cleaned_data))
             query_dict = QueryDict(mutable=True)
             query_dict.update(form.cleaned_data)
             request.data = query_dict
