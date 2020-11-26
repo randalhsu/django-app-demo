@@ -23,14 +23,14 @@ class RestAPITestCase(TestCase):
         self.assertLessEqual(len(serializer.data), 7)
 
         # create more records then check returned list length
-        for i in range(5):
+        for i in range(UrlRecordListCreateView.MAX_LIST_SIZE + 5):
             response = self.client.post(reverse('list_create_url'), {
                                         'long_url': 'w3.org', 'short_url': str(i)})
 
         response = self.client.get(reverse('list_create_url'))
         serializer = UrlRecordSerializer(response.data, many=True)
         self.assertEqual(len(serializer.data),
-                         UrlRecordListCreateView.MAX_RECORDS)
+                         UrlRecordListCreateView.MAX_LIST_SIZE)
 
     def test_retrieve_valid_record(self):
         response = self.client.get(

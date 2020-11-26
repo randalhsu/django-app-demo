@@ -195,7 +195,7 @@ class UrlAPIErrorResponse(Response):
 class UrlRecordListCreateView(generics.ListCreateAPIView):
     '''View class specialized for handling List and Create REST API.'''
 
-    MAX_RECORDS = 10
+    MAX_LIST_SIZE = 50
     serializer_class = UrlRecordSerializer
 
     def get(self, request: Request) -> Response:
@@ -210,7 +210,7 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
         logger.info(f'[{get_client_ip(request)}] API List: {request.data}')
         try:
             records = UrlRecord.objects.all().order_by(
-                '-last_activity_time')[:type(self).MAX_RECORDS]
+                '-last_activity_time')[:type(self).MAX_LIST_SIZE]
             serializer = UrlRecordSerializer(records, many=True)
             return Response(serializer.data)
         except:
