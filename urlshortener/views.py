@@ -331,8 +331,8 @@ def handle_redirect(request: Request, short_url: str) -> Response:
     except UrlRecord.DoesNotExist:
         pass
     except UrlRecord.MultipleObjectsReturned:
-        logger.error(
-            f'Impossible! Multiple mappings for short_url={short_url}')
+        logger.error(Template('[$ip] Impossible! Multiple mappings for short_url=`$short_url`').substitute(
+            ip=get_client_ip(request), short_url=short_url))
 
     logger.info(Template('[$ip] Redirect `$short_url` failed...').substitute(
         ip=get_client_ip(request), short_url=short_url))
