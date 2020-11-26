@@ -196,6 +196,8 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
     '''View class specialized for handling List and Create REST API.'''
 
     MAX_LIST_SIZE = 50
+    queryset = UrlRecord.objects.all().order_by(
+        '-last_activity_time')[:MAX_LIST_SIZE]
     serializer_class = UrlRecordSerializer
 
     def get(self, request: Request) -> Response:
@@ -209,9 +211,7 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
         '''
         logger.info(f'[{get_client_ip(request)}] API List: {request.data}')
         try:
-            records = UrlRecord.objects.all().order_by(
-                '-last_activity_time')[:type(self).MAX_LIST_SIZE]
-            serializer = UrlRecordSerializer(records, many=True)
+            serializer = UrlRecordSerializer(self.get_queryset(), many=True)
             return Response(serializer.data)
         except:
             logger.error('Unexpected error:', sys.exc_info()[0])
@@ -249,6 +249,7 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
         data = request.data.copy()  # get a mutable copy
         data['long_url'] = long_url
         data['short_url'] = short_url
+        data['visit_count'] = 0  # always start from zero
 
         serializer = UrlRecordSerializer(data=data)
         if serializer.is_valid():
@@ -271,30 +272,38 @@ class UrlRecordRetrieveView(generics.RetrieveAPIView):
 
     serializer_class = UrlRecordSerializer
 
-    def get(self, request: Request) -> Response:
+    def get(self, request: Request, short_url: str = '') -> Response:
         '''Handler for GET API retrieving an URL mapping record.
 
         Args:
             request (Request): The incoming request.
+            short_url(str): Parsed from URL if the request was sent from Browsable API. Defaults to ''.
 
         Returns:
             Response: Response for API retrieving an URL mapping record.
         '''
-        logger.info(
-            f'[{get_client_ip(request)}] API Retrieve: {request.data} / {request.query_params}')
-        for params in (request.data, request.query_params):
-            if short_url := params.get('short_url', ''):
-                if is_valid_short_url(short_url):
-                    try:
-                        record = UrlRecord.objects.get(short_url=short_url)
-                        serializer = UrlRecordSerializer(record)
-                        return Response(serializer.data)
-                    except:
-                        return UrlAPIErrorResponse(ErrorReason.SHORT_URL_MAPPING_NOT_EXISTS, short_url=short_url)
-                else:
-                    return UrlAPIErrorResponse(ErrorReason.INVALID_SHORT_URL, short_url=short_url)
+        if short_url:
+            # Request comes from Browsable API
+            if short_url.endswith('/'):
+                short_url = short_url[:-1]
+        elif short_url := request.data.get('short_url', ''):
+            # Request comes from GET body
+            pass
+        elif short_url := request.query_params.get('short_url', ''):
+            # Request comes from URL param
+            pass
 
-        return UrlAPIErrorResponse(ErrorReason.INVALID_SHORT_URL)
+        logger.info(f'[{get_client_ip(request)}] API Retrieve: {short_url}')
+
+        if is_valid_short_url(short_url):
+            try:
+                record = UrlRecord.objects.get(short_url=short_url)
+                serializer = UrlRecordSerializer(record)
+                return Response(serializer.data)
+            except:
+                return UrlAPIErrorResponse(ErrorReason.SHORT_URL_MAPPING_NOT_EXISTS, short_url=short_url)
+
+        return UrlAPIErrorResponse(ErrorReason.INVALID_SHORT_URL, short_url=short_url)
 
 
 def handle_redirect(request: Request, short_url: str) -> Response:
