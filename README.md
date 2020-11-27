@@ -1,6 +1,6 @@
 # Django URL Shortener
 
-## [Live Demo](https://veryshort.herokuapp.com/)
+## [Live Demo](https://veryshort.herokuapp.com/) (For demo purpose only!)
 
 A Django app which implements URL shortening backend mechanism, and a Vue.js frontend interacts with it.
 
