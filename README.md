@@ -13,12 +13,12 @@ It provides the following APIs:
 
 | Endpoint         | Method   | Action   | Example request  | Example result |
 | ---------------- |:--------:|:--------:|----------------- | -------------- |
-| ``api/v1/urls``  | ``GET``  | List     | (empty)           | Returns shortened mappings as list. |
+| ``api/v1/urls``  | ``GET``  | List     | (empty)           | Returns a list of shortened mappings. |
 | ``api/v1/urls``  | ``POST`` | Create   | ``{"long_url": "https://www.google.com/search?q=a+very+long+query", "short_url": "g"}`` | Creates a relative URL <code>g</code> which redirects to the long link upon accessed. |
 | ``api/v1/urls/`` | ``GET``  | Retrieve | ``{"short_url": "g"}`` | ``{"long_url": "https://www.google.com/search?q=a+very+long+query", "short_url": "g", "visit_count": 1}`` |
 
 
-If <code>short_url</code> is ommitted when creating mapping, will generate a random one such as ``y5xVCn`` and assign to it.
+If <code>short_url</code> is ommitted when creating mapping, the app will generate a random one such as ``y5xVCn`` for it.
 
 See [Live Demo](https://veryshort.herokuapp.com/) for more concrete examples.
 
@@ -34,7 +34,7 @@ It also features massive error handling for various cases. For example:
 | ``api/v1/urls``  | ``POST`` | Create   | ``{"long_url": "http://w3.org", "short_url": "; drop urlrecords --"}`` | ``{"errors": [{"code": "1002", "title": "Invalid short_url", "detail": "short_url:`; drop urlrecords --` cannot match pattern: ^[A-Za-z0-9]{1,32}$", "status": "400"}]}`` |
 
 
-See [Live Demo](https://veryshort.herokuapp.com/) in action.
+See [Live Demo](https://veryshort.herokuapp.com/) in action. (Use [Browsable API page](https://veryshort.herokuapp.com/api/v1/urls) to bypass frontend validations.)
 
 
 ## Deploy to Heroku
