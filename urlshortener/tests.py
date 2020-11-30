@@ -108,7 +108,7 @@ class RestAPITestCase(TestCase):
             self.assertEqual(error['title'], 'Invalid long_url')
 
         # short_url pattern not match
-        for short_url in ('; drop urlrecords --', '#', '/*', '/* --', '--', "'''", '"""'):
+        for short_url in ('"; drop urlrecords --', '#', '/*', '/* --', '--', "'''", '"""'):
             data = {'long_url': 'w3.org', 'short_url': short_url}
             response = self.client.post(
                 reverse('urlshortener:list_create_url'), data)

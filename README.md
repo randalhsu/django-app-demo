@@ -31,7 +31,7 @@ It also features massive error handling for various cases. For example:
 | ---------------- |:--------:|:--------:|----------------- | ---------------- |
 | ``api/v1/urls``  | ``POST`` | Create   | ``{"long_url": "yeah", "short_url": "y"}`` | ``{"errors": [{"code": "1001", "title": "Invalid long_url", "detail": "long_url:`http://yeah` is not a valid URL", "status": "400"}]}`` |
 | ``api/v1/urls``  | ``POST`` | Create   | ``{"long_url": "//w3.org", "short_url": "w"}`` | ``{"errors": [{"code": "1005", "title": "Malformed data", "detail": "Are you malicious?", "status": "400"}]}`` |
-| ``api/v1/urls``  | ``POST`` | Create   | ``{"long_url": "http://w3.org", "short_url": "; drop urlrecords --"}`` | ``{"errors": [{"code": "1002", "title": "Invalid short_url", "detail": "short_url:`; drop urlrecords --` cannot match pattern: ^[A-Za-z0-9]{1,32}$", "status": "400"}]}`` |
+| ``api/v1/urls``  | ``POST`` | Create   | ``{"long_url": "http://w3.org", "short_url": "\"; drop urlrecords --"}`` | ``{"errors": [{"code": "1002", "title": "Invalid short_url", "detail": "short_url:`\"; drop urlrecords --` cannot match pattern: ^[A-Za-z0-9]{1,32}$", "status": "400"}]}`` |
 
 
 See [Live Demo](https://veryshort.herokuapp.com/) in action. (Use [Browsable API page](https://veryshort.herokuapp.com/api/v1/urls) to bypass frontend validations.)
