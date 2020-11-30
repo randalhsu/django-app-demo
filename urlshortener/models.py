@@ -1,3 +1,4 @@
+from string import Template
 from django import forms
 from django.db import models
 from django.utils import timezone
@@ -20,6 +21,9 @@ class UrlRecord(models.Model):
     # expire_time = models.DateTimeField(default=one_minute_later)
     last_activity_time = models.DateTimeField(auto_now=True)
     visit_count = models.IntegerField(default=0)
+
+    def __str__(self):
+        return Template('`$short_url`->`$long_url`($visit_count)').substitute(short_url=self.short_url, long_url=self.long_url, visit_count=self.visit_count)
 
     class Meta:
         db_table = 'urlrecords'

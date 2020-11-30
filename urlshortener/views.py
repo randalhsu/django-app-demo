@@ -52,7 +52,6 @@ def convert_to_absolute_url(url: str) -> str:
     Returns:
         str: An absolute URL.
     '''
-
     try:
         if urlsplit(url).netloc:
             return url
@@ -262,9 +261,9 @@ class UrlRecordListCreateView(generics.ListCreateAPIView):
             if UrlRecord.objects.filter(short_url=short_url).exists():
                 return UrlAPIErrorResponse(ErrorReason.SHORT_URL_ALREADY_EXISTS, short_url=short_url)
 
-            serializer.save()
-            logger.info(Template('[$ip] Created mapping: `$short_url` -> `$long_url`').substitute(
-                ip=get_client_ip(request), short_url=short_url, long_url=long_url))
+            record = serializer.save()
+            logger.info(Template('[$ip] Created mapping: $record').substitute(
+                ip=get_client_ip(request), record=record))
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         return UrlAPIErrorResponse(ErrorReason.MALFORMED_DATA)
@@ -325,8 +324,8 @@ def handle_redirect(request: Request, short_url: str) -> Response:
         if record := UrlRecord.objects.get(short_url=short_url):
             record.visit_count += 1
             record.save()
-            logger.info(Template('[$ip] Redirect `$short_url` -> `$long_url` (total $count times)').substitute(
-                ip=get_client_ip(request), short_url=short_url, long_url=record.long_url, count=record.visit_count))
+            logger.info(Template('[$ip] Redirect $record').substitute(
+                ip=get_client_ip(request), record=record))
             return HttpResponseRedirect(record.long_url)
     except UrlRecord.DoesNotExist:
         pass
