@@ -1,6 +1,8 @@
 from django.urls import path, re_path
 from . import views
 
+app_name = 'urlshortener'
+
 LIST_CREATE_URL_API_ENDPOINT = 'api/v1/urls'
 RETRIEVE_URL_API_ENDPOINT = 'api/v1/urls/'
 
