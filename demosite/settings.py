@@ -136,8 +136,11 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
-try:
-    import django_heroku
-    django_heroku.settings(locals())
-except ImportError:
-    pass
+# Heroku-related settings when deployed on Heroku
+if '/app' in os.environ['HOME']:
+    try:
+        import django_heroku
+    except ImportError:
+        pass
+    else:
+        django_heroku.settings(locals())
