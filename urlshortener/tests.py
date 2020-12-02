@@ -1,7 +1,7 @@
-from django.test import TestCase, Client
+import re
+from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.response import Response
 from .models import UrlRecord
 from .serializers import UrlRecordSerializer
 from .views import UrlRecordListCreateView, DEFAULT_SHORT_URL_LENGTH, VALID_SHORT_URL_REGEX
@@ -9,9 +9,6 @@ from .views import UrlRecordListCreateView, DEFAULT_SHORT_URL_LENGTH, VALID_SHOR
 
 class RestAPITestCase(TestCase):
     fixtures = ['test_data.json']
-
-    def setUp(self):
-        self.client = Client()
 
     def test_list_record(self):
         response = self.client.get(reverse('urlshortener:list_create_url'))
@@ -146,3 +143,25 @@ class UrlRecordSerializerTestCase(TestCase):
             'visit_count': 19,
         }
         self.assertEqual(serializer.data, data)
+
+
+class RedirectFunctionTestCase(TestCase):
+    fixtures = ['test_data.json']
+
+    def test_successful_redirect(self):
+        for short_url in ('www', 'f', 'short'):
+            long_url = UrlRecord.objects.all().get(short_url=short_url).long_url
+            response = self.client.get('/' + short_url)
+            self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+            self.assertEqual(response['Location'], long_url)
+
+    def test_failed_redirect(self):
+        for short_url in ('wtf', 'NotExists', 'wtf_not-exists', 'w t f i s t h i s'):
+            if re.match(VALID_SHORT_URL_REGEX, short_url):
+                error_text = 'Redirect to the shortener page'
+            else:
+                error_text = 'The requested resource was not found on this server.'
+
+            response = self.client.get('/' + short_url)
+            self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+            self.assertIn(error_text, response.content.decode('utf-8'))
