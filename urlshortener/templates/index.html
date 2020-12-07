@@ -55,9 +55,9 @@ app.component('add-url-record-form', {
         };
     },
     computed: {
-        isInvalidUrl: function() {
+        isValidUrl: function() {
             this.isValidShortUrl = !this.availabilityMessage.startsWith('🚫')
-            return !this.isValidLongUrl || !this.isValidShortUrl;
+            return this.isValidLongUrl && this.isValidShortUrl;
         },
     },
     methods: {
@@ -87,6 +87,7 @@ app.component('add-url-record-form', {
             setVisibility(document.getElementById('copy-button'), true);
             this.emitter.emit(NEW_RECORD_CREATED_EVENT);
             this.availabilityMessage = '';
+            this.availabilityCache[this.shortUrl] = false;
         },
         onCreateFailed: function(response) {
             this.title = 'Oooooops! Sorry! 😭';
@@ -182,7 +183,7 @@ app.component('add-url-record-form', {
           <input type="text" id="short-url" class="col-sm-5 form-control" name="short_url" v-model="shortUrl" maxlength="32" pattern="[A-Za-z0-9]+" placeholder="Empty or [A-Za-z0-9]+">
           <span id="availability-message" class="form-text col-sm-5 text-muted">[[ availabilityMessage ]]</span>
         </div>
-        <button type="submit" id="submit-button" class="btn btn-primary btn-lg" :disabled="isInvalidUrl">Shorten!</button>
+        <button type="submit" id="submit-button" class="btn btn-primary btn-lg" :disabled="!isValidUrl">Shorten!</button>
       </form>
       <div id="submit-result" class="card my-3" style="visibility: hidden;">
         <div class="card-body">
