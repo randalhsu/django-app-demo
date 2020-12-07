@@ -44,6 +44,7 @@ class FrontendTest(LiveServerTestCase):
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument('--headless')
+        options.add_argument('--window-size=1920,1080')
         # https://stackoverflow.com/questions/61325672/browser-switcher-service-cc238-xxx-init-error-with-python-selenium-script-w
         options.add_experimental_option('excludeSwitches', ['enable-logging'])
 
@@ -74,24 +75,35 @@ class FrontendTest(LiveServerTestCase):
         self.assertEqual(driver.current_url, long_url)
 
     def test_input_url_change_submit_button_state(self):
+
+        def element_has_disabled_attribute(element):
+            return not (element.get_attribute('disabled') is None)
+
         driver = self.driver
         driver.get(self.live_server_url)
         long_url_field = driver.find_element_by_id('long-url')
         button = driver.find_element_by_id('submit-button')
+        WebDriverWait(driver, type(self).TIMEOUT).until(
+            lambda _: element_has_disabled_attribute(button))
         self.assertIsNotNone(button.get_attribute('disabled'))
 
         # invalid long_url
         long_url_field.send_keys('http')
+        WebDriverWait(driver, type(self).TIMEOUT).until(
+            lambda _: element_has_disabled_attribute(button))
         self.assertIsNotNone(button.get_attribute('disabled'))
         # valid long_url
         long_url_field.send_keys('://w3.org')
+        self.assertEqual(
+            'http://w3.org', long_url_field.get_attribute('value'))
+        WebDriverWait(driver, type(self).TIMEOUT).until(
+            lambda _: not element_has_disabled_attribute(button))
         self.assertIsNone(button.get_attribute('disabled'))
-        # print(long_url_field.get_attribute('value'))
 
         # collided short_url
         driver.find_element_by_id('short-url').send_keys('short')
-        # wait for API round trip time
-        time.sleep(0.2)
+        WebDriverWait(driver, type(self).TIMEOUT).until(
+            lambda _: element_has_disabled_attribute(button))
         self.assertIsNotNone(button.get_attribute('disabled'))
 
 
