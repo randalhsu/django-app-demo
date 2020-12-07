@@ -1,10 +1,98 @@
+import errno
 import re
-from django.test import TestCase
+import socket
+import time
+from django.core.servers.basehttp import ThreadedWSGIServer
+from django.test import LiveServerTestCase, TestCase
+from django.test.testcases import QuietWSGIRequestHandler, LiveServerThread
 from django.urls import reverse
 from rest_framework import status
+from selenium import webdriver
+from selenium.webdriver.support.wait import WebDriverWait
 from .models import UrlRecord
 from .serializers import UrlRecordSerializer
 from .views import UrlRecordListCreateView, DEFAULT_SHORT_URL_LENGTH, VALID_SHORT_URL_REGEX
+
+
+# To suppress the warnings about 'An existing connection was forcibly closed by the remote host'
+# https://code.djangoproject.com/ticket/21227
+class ConnectionResetErrorSwallowingQuietWSGIRequestHandler(QuietWSGIRequestHandler):
+    def handle_one_request(self):
+        try:
+            super().handle_one_request()
+        except socket.error as err:
+            if err.errno != errno.WSAECONNRESET:
+                raise
+
+
+class ConnectionResetErrorSwallowingLiveServerThread(LiveServerThread):
+    def _create_server(self):
+        return ThreadedWSGIServer((self.host, self.port), ConnectionResetErrorSwallowingQuietWSGIRequestHandler, allow_reuse_address=False)
+
+
+class FrontendTest(LiveServerTestCase):
+    server_thread_class = ConnectionResetErrorSwallowingLiveServerThread
+
+    fixtures = ['test_data.json']
+    TIMEOUT = 10
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+
+        options = webdriver.ChromeOptions()
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument('--headless')
+        # https://stackoverflow.com/questions/61325672/browser-switcher-service-cc238-xxx-init-error-with-python-selenium-script-w
+        options.add_experimental_option('excludeSwitches', ['enable-logging'])
+
+        cls.driver = webdriver.Chrome(options=options)
+        cls.driver.implicitly_wait(cls.TIMEOUT)
+        WebDriverWait(cls.driver, cls.TIMEOUT).until(
+            lambda driver: driver.find_element_by_tag_name('body'))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.driver.quit()
+        super().tearDownClass()
+
+    def test_create_valid_record(self):
+        long_url = 'https://www.w3.org/'
+        driver = self.driver
+        driver.get(self.live_server_url)
+        driver.find_element_by_id('long-url').send_keys(long_url)
+        driver.find_element_by_id('short-url').send_keys('w3')
+        driver.find_element_by_id('submit-button').click()
+        self.assertIn('Congratulation',
+                      driver.find_element_by_class_name('card-title').text)
+
+        # click the created link and check url
+        driver.find_element_by_id('created-link').click()
+        window_after = driver.window_handles[1]
+        driver.switch_to.window(window_after)
+        self.assertEqual(driver.current_url, long_url)
+
+    def test_input_url_change_submit_button_state(self):
+        driver = self.driver
+        driver.get(self.live_server_url)
+        long_url_field = driver.find_element_by_id('long-url')
+        button = driver.find_element_by_id('submit-button')
+        self.assertIsNotNone(button.get_attribute('disabled'))
+
+        # invalid long_url
+        long_url_field.send_keys('http')
+        self.assertIsNotNone(button.get_attribute('disabled'))
+        # valid long_url
+        long_url_field.send_keys('://w3.org')
+        self.assertIsNone(button.get_attribute('disabled'))
+        # print(long_url_field.get_attribute('value'))
+
+        # collided short_url
+        driver.find_element_by_id('short-url').send_keys('short')
+        # wait for API round trip time
+        time.sleep(0.2)
+        self.assertIsNotNone(button.get_attribute('disabled'))
 
 
 class RestAPITestCase(TestCase):
