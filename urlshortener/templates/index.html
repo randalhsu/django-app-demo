@@ -30,10 +30,9 @@ function setVisibility(el, isVisible) {
     el.style.visibility = isVisible ? '' : 'hidden';
 }
 
-//const APP_PATH = 'http://127.0.0.1:8000/url/';
 const APP_PATH = window.location.href;
-const LIST_CREATE_API_PATH = APP_PATH + 'api/v1/urls';
-const RETRIEVE_API_PATH = APP_PATH + 'api/v1/urls/';
+const LIST_CREATE_API_ENDPOINT = APP_PATH + 'api/v1/urls';
+const RETRIEVE_API_ENDPOINT = APP_PATH + 'api/v1/urls/';
 
 const app = Vue.createApp({});
 const emitter = mitt();
@@ -46,6 +45,8 @@ app.component('add-url-record-form', {
         return {
             longUrl: '',
             shortUrl: '',
+            isValidLongUrl: false,
+            isValidShortUrl: true,
             availabilityCache: {},
             availabilityMessage: '',
             title: 'Result',
@@ -54,8 +55,9 @@ app.component('add-url-record-form', {
         };
     },
     computed: {
-        isInvalidShortUrl: function() {
-            return this.availabilityMessage.startsWith('🚫');
+        isInvalidUrl: function() {
+            this.isValidShortUrl = !this.availabilityMessage.startsWith('🚫')
+            return !this.isValidLongUrl || !this.isValidShortUrl;
         },
     },
     methods: {
@@ -65,7 +67,7 @@ app.component('add-url-record-form', {
             const submitResult = document.getElementById('submit-result');
             setVisibility(submitResult, false);
 
-            axios.post(LIST_CREATE_API_PATH, {
+            axios.post(LIST_CREATE_API_ENDPOINT, {
                 long_url: this.longUrl,
                 short_url: this.shortUrl,
             })
@@ -81,14 +83,15 @@ app.component('add-url-record-form', {
             const linkUrl = APP_PATH + this.shortUrl;
             this.title = 'Congratulation! Link created ✔';
             this.resultStatus = `${response.request.status} ${response.request.statusText}`;
-            this.resultHtml = `<a href="${linkUrl}" target="_blank">${linkUrl}</a>`;
+            this.resultHtml = `<a href="${linkUrl}" target="_blank" id="created-link">${linkUrl}</a>`;
             setVisibility(document.getElementById('copy-button'), true);
             this.emitter.emit(NEW_RECORD_CREATED_EVENT);
             this.availabilityMessage = '';
         },
         onCreateFailed: function(response) {
             this.title = 'Oooooops! Sorry! 😭';
-            this.resultStatus = `${response.request.status} ${response.request.statusText}`;
+            const errorDetail = JSON.parse(response.request.response)['errors'][0]['detail'];
+            this.resultStatus = `${response.request.status} ${response.request.statusText} (${errorDetail})`;
             this.resultHtml = `Failed to shorten URL with "${this.shortUrl}" 💔`;
             setVisibility(document.getElementById('copy-button'), false);
         },
@@ -116,6 +119,9 @@ app.component('add-url-record-form', {
 
             document.body.removeChild(textArea);
         },
+        updateLongUrlValidity: function(e) {
+            this.isValidLongUrl = e.target.checkValidity();
+        },
         checkShortUrlAvailability: function(e) {
             const inputedShortUrl = e.target.value;
             if (inputedShortUrl.length === 0) {
@@ -139,7 +145,7 @@ app.component('add-url-record-form', {
 
             this.availabilityMessage = '';
 
-            axios.get(RETRIEVE_API_PATH, {
+            axios.get(RETRIEVE_API_ENDPOINT, {
                 params: {
                     short_url: inputedShortUrl,
                 }
@@ -159,6 +165,8 @@ app.component('add-url-record-form', {
         },
     },
     mounted() {
+        document.getElementById('long-url').addEventListener('focus', this.updateLongUrlValidity);
+        document.getElementById('long-url').addEventListener('input', this.updateLongUrlValidity);
         document.getElementById('short-url').addEventListener('focus', this.checkShortUrlAvailability);
         document.getElementById('short-url').addEventListener('input', this.checkShortUrlAvailability);
     },
@@ -174,7 +182,7 @@ app.component('add-url-record-form', {
           <input type="text" id="short-url" class="col-sm-5 form-control" name="short_url" v-model="shortUrl" maxlength="32" pattern="[A-Za-z0-9]+" placeholder="Empty or [A-Za-z0-9]+">
           <span id="availability-message" class="form-text col-sm-5 text-muted">[[ availabilityMessage ]]</span>
         </div>
-        <button type="submit" id="submit-button" class="btn btn-primary btn-lg" :disabled="isInvalidShortUrl">Shorten!</button> 
+        <button type="submit" id="submit-button" class="btn btn-primary btn-lg" :disabled="isInvalidUrl">Shorten!</button>
       </form>
       <div id="submit-result" class="card my-3" style="visibility: hidden;">
         <div class="card-body">
@@ -198,7 +206,7 @@ app.component('url-record-list', {
     methods: {
         updateList: async function() {
             try {
-                const response = await axios.get(LIST_CREATE_API_PATH);
+                const response = await axios.get(LIST_CREATE_API_ENDPOINT);
                 //console.log(response);
                 this.urlRecordList = response.data;
                 this.message = this.urlRecordList.length > 0 ? '' : '(Database is empty...)';
