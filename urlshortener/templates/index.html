@@ -46,6 +46,7 @@ app.component('add-url-record-form', {
         return {
             longUrl: '',
             shortUrl: '',
+            availabilityCache: {},
             availabilityMessage: '',
             title: 'Result',
             resultStatus: 'status',
@@ -126,6 +127,16 @@ app.component('add-url-record-form', {
                 this.availabilityMessage = '🚫 Invalid pattern!';
                 return;
             }
+
+            if (inputedShortUrl in this.availabilityCache) {
+                if (this.availabilityCache[inputedShortUrl] === true) {
+                    this.availabilityMessage = '✔ Good';
+                } else {
+                    this.availabilityMessage = '🚫 Occupied!';
+                }
+                return;
+            }
+
             this.availabilityMessage = '';
 
             axios.get(RETRIEVE_API_PATH, {
@@ -136,11 +147,13 @@ app.component('add-url-record-form', {
             .then(function(response) {
                 /* Record already exists, this short URL is unavailable */
                 this.availabilityMessage = '🚫 Occupied!';
+                this.availabilityCache[inputedShortUrl] = false;
             }.bind(this))
             .catch(function(error) {
                 if (error.message.endsWith('404')) {
                     /* 'Request failed with status code 404', this short URL is available */
                     this.availabilityMessage = '✔ Good';
+                    this.availabilityCache[inputedShortUrl] = true;
                 }
             }.bind(this));
         },
