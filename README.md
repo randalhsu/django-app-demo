@@ -56,3 +56,11 @@ heroku logs --tail
 </pre>
 
 By default, ``settings.py`` is configured as ``DEBUG = True``.
+
+## Docker support
+
+Modify configs inside ``.env``, then run:
+<pre>
+docker-compose up --build -d
+docker-compose run --rm web python manage.py migrate
+</pre>
