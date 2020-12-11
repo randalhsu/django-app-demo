@@ -83,6 +83,8 @@ def is_valid_long_url(url: str) -> bool:
 
 VALID_SHORT_URL_REGEX = r'(?P<short_url>^[A-Za-z0-9]{1,32}$)'
 DEFAULT_SHORT_URL_LENGTH = 6
+# To avoid confusion
+RESERVED_SHORT_URL_LIST = ('admin', 'api', 'swagger')
 
 
 def is_valid_short_url(short_url: str) -> bool:
@@ -96,7 +98,7 @@ def is_valid_short_url(short_url: str) -> bool:
     '''
     if re.match(VALID_SHORT_URL_REGEX, short_url) is None:
         return False
-    if short_url == 'api':
+    if short_url in RESERVED_SHORT_URL_LIST:
         return False
     return True
 
