@@ -1,7 +1,6 @@
 import errno
 import re
 import socket
-import time
 from django.core.servers.basehttp import ThreadedWSGIServer
 from django.test import LiveServerTestCase, TestCase
 from django.test.testcases import QuietWSGIRequestHandler, LiveServerThread

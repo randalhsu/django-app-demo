@@ -2,8 +2,8 @@ import enum
 import logging
 import random
 import string
-from string import Template
 import re
+from string import Template
 import sys
 from urllib.parse import urlsplit
 from django.core.validators import ValidationError
@@ -88,7 +88,7 @@ RESERVED_SHORT_URL_LIST = ('admin', 'api', 'swagger')
 
 
 def is_valid_short_url(short_url: str) -> bool:
-    '''Check if the short_url is a valid for REST API.
+    '''Check if the short_url is a valid pattern for REST API.
 
     Args:
         short_url (str): The short_url to check.
